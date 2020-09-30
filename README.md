@@ -6,3 +6,5 @@
 Phonons are the quantized vibrational modes of solid structures. 
 ## Project Description
 This project will explore calculating phonons on spring based solids.
+# This project is licenced under the MIT license
+The LICENSE file contains the MIT license.

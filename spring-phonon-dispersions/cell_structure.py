@@ -8,7 +8,9 @@ class CellStructure(object):
     cell = np.array([])
     atom_list = []
     force_dict = {
-        'C': {'force_constant': 1.0}
+        'C': {'force_constant': 1.0},
+        'Si': {'force_constant': 4.0},
+        'Ge': {'force_constant': 10.0}
     }
     
     def __init__(self, cell):
@@ -18,7 +20,7 @@ class CellStructure(object):
     def get_cell(self):
         return self.cell
     
-    def place_atom(self, atom_name, position):
+    def place_atom(self, atom_name, position, connected=True):
         # See if we have a force constant for the particle
         try:
             force = self.force_dict.get(atom_name).get('force_constant')
@@ -27,5 +29,5 @@ class CellStructure(object):
             force = 1.0
         
         # Append the new atom to the atom list
-        self.atom_list.append((atom_name, position, force))
-        
+        self.atom_list.append((atom_name, position, force, connected))
+    

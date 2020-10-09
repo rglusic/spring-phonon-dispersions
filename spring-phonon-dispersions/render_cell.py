@@ -5,6 +5,9 @@ class RenderCell(object):
     """ Pipes the cell object to our render pipeline,
     which runs through a vpython interface.
     """
+    # Class globals
+    use_two_body_analytical = False
+    
     # Forces filled by sliders
     initial_force_factor = 0.
     initial_force_factor_right = 0.
@@ -27,38 +30,72 @@ class RenderCell(object):
     sphere_list = []
     spring_list = []
     
-    def __init__(self, cell_obj):
+    def __init__(self, cell_obj, use_two_body_analytical=False):
+        self.use_two_body_analytical = use_two_body_analytical
         self.initial_velocity = vp.vector(0.,0.,0.)
         self.cell_obj = cell_obj
         self._initialize()
         
     def _initialize(self):
-        every_other = 0
-        for _, position, force in self.cell_obj.atom_list:
+        # Construct and place all atoms.
+        for _, position, force, connected in self.cell_obj.atom_list:
             atom = vp.sphere(pos=position, radius=0.35,
                     velocity=vp.vector(0.,0.,0.), mass=1.0, initial_force=vp.vector(0.,0.,0),
-                    make_trail=False)
+                    make_trail=False, connected=connected, initial_pos=position, force_constant=force)
             self.sphere_list.append(atom)
-            if every_other == 1:
-                self.spring_list.append(vp.helix(pos=position, atom_one=atom, atom_two=last_atom, eq_len=(atom.pos-last_atom.pos).mag,
-                                                axis=(last_atom.pos-atom.pos), radius=0.25, force_constant=force))
-                every_other = 0
-            every_other += 1
-            last_atom  = atom
+        
+        # Construct and place all springs between the atoms if connected.
+        # Grab every other atom.
+        first_set_atoms = self.sphere_list[0::2]
+        second_set_atoms = self.sphere_list[1::2]
+        atoms_tuple_list = list(zip(first_set_atoms, second_set_atoms))
+        
+        for atom_one, atom_two in atoms_tuple_list:
+            # Attach a spring between every atom unless specified otherwise.
+            if (atom_one.connected) and (atom_two.connected):
+                self.spring_list.append(vp.helix(pos=atom_one.pos, atom_one=atom_one, atom_two=atom_two, eq_len=(atom_one.pos-atom_two.pos).mag,
+                                                axis=(atom_two.pos-atom_one.pos), radius=0.25, force_constant=atom_one.force_constant,
+                                        coils=atom_one.force_constant+4))
             
+    def apply_physics(self, spring, two_body_analytical=False, t=0):
+        """ Return the force exerted on the atom based on initial conditions. If using analytical
+        two body, then just change the positions of each atom at a given time t.
+        """
+        # Newton's Method
+        if not two_body_analytical:
+            spring_force = vp.vector(0.,0.,0.)
+            force_dir = (spring.atom_two.pos - spring.atom_one.pos).hat
+            for s in self.spring_list:
+                new_len = (s.atom_one.pos-s.atom_two.pos).mag
+                spring_force += -s.force_constant*(s.eq_len-new_len)*force_dir
+            return spring_force
+        
+        # Analytical method for two body situation.
+        force_dir = (spring.atom_two.pos - spring.atom_one.pos).hat
+        s = spring # Tired of typing spring.
+        k_over_m_sqrt = np.sqrt(s.force_constant/(s.atom_one.mass))
+        omega = k_over_m_sqrt
+        phase = 0.
+        amplitude_1 = 1.
+        s.atom_one.pos = -(amplitude_1 * s.eq_len * np.cos(omega*t+phase))*force_dir + -amplitude_1 * s.eq_len*force_dir + s.atom_one.initial_pos
+        s.atom_one.velocity = (amplitude_1 * s.eq_len * omega * np.sin(omega*t+phase))*force_dir
+        
+        s.atom_two.pos = (amplitude_1 * s.eq_len * np.cos(omega*t+phase))*force_dir + amplitude_1 * s.eq_len*force_dir + s.atom_two.initial_pos
+        s.atom_two.velocity = -(amplitude_1 * omega * np.sin(omega*t+phase))*force_dir
     
     def render(self):
         self.initial_force_factor = 0.
-        
         # Simulation loop
         while True:
             # Determine if we're paused or not
             if self.running:
                 vp.rate(self.rate_of_animation)
                 
+                # Reset spring force
+                spring_force = vp.vector(0.,0.,0.)
+                
                 # Iterate over all of the springs.
                 for spring in self.spring_list:
-                    
                     # Grab direction if an initial force exists. Only apply an initial force on the first atom.
                     force_dir = (spring.atom_two.pos - spring.atom_one.pos).hat
                     if self.initial_force_factor:
@@ -77,11 +114,11 @@ class RenderCell(object):
                         force_in_direction = force_dir*self.initial_force_factor_right
                         spring.atom_one.initial_force = force_in_direction
                     
-                    # Recalculate the force on all atoms attached to every spring... This will be slow... 
-                    spring_force = vp.vector(0.,0.,0.)
-                    for s in self.spring_list:
-                        new_len = (s.atom_one.pos-s.atom_two.pos).mag
-                        spring_force += -s.force_constant*(s.eq_len-new_len)*force_dir
+                    # Calculate force on spring's atoms just from displacement
+                    if self.use_two_body_analytical:
+                        self.apply_physics(spring, True, t=self.time)
+                    else:
+                        spring_force += self.apply_physics(spring)
                     
                     # First atom bound to spring
                     spring.atom_one.force = spring_force + spring.atom_one.initial_force
@@ -98,7 +135,14 @@ class RenderCell(object):
                 
                 # Are we also plotting information?
                 if self.using_plots:
-                    self._update_plots(self.sphere_list[0].pos, self.sphere_list[0].velocity)
+                    # Pick our data. It seems like most of these want three cases...
+                    try:
+                        spheres_pos = [self.sphere_list[0].pos,self.sphere_list[2].pos,self.sphere_list[4].pos]
+                        spheres_vel = [self.sphere_list[0].velocity,self.sphere_list[2].velocity,self.sphere_list[4].velocity]
+                        self._update_plots(spheres_pos, spheres_vel)
+                    except IndexError:
+                        # Should always be at least one case
+                        self._update_plots(self.sphere_list[0].pos, self.sphere_list[0].velocity)
                 
                 # Update time per step size.
                 self.time += self.time_step
@@ -112,18 +156,55 @@ class RenderCell(object):
     
     def plot_supplimentary_information(self):
         self.using_plots = True
-        atom_position_graph = vp.graph(title='Absolute Displacement of Atom(s)', xtitle=r't [s]', ytitle='r(t) [m]', fast=True)
-        self.atom_position_points = vp.gcurve(graph=atom_position_graph, color=vp.color.red, size=0.1)
-        atom_velocity_graph = vp.graph(title='Absolute Speed of Atom(s)', xtitle=r't [s]', ytitle=r'|r(t)-vector| [m/s]', fast=True)
-        self.atom_velocity_points = vp.gcurve(graph=atom_velocity_graph, color=vp.color.blue, size=0.1)
+        atom_position_graph = vp.graph(title='Absolute Displacement of Atom(s)', 
+                                       xtitle=r't [s]', ytitle=r'|r(t)-vector| [m]', fast=False,
+                                       legend=True)
+        atom_velocity_graph = vp.graph(title='Absolute Speed of Atom(s)', xtitle=r't [s]', ytitle=r'|r(t)-dot-vector| [m/s]', fast=False, 
+                                       legend=True)
+        if len(self.sphere_list) > 5:
+            self.atom_position_points = vp.gcurve(graph=atom_position_graph, color=vp.color.red, size=0.1, 
+            label="Spring Constant: {} N/m".format(self.sphere_list[0].force_constant))
+            self.atom_position_points_2 = vp.gcurve(graph=atom_position_graph, color=vp.color.blue, size=0.1, 
+            label="Spring Constant: {} N/m".format(self.sphere_list[2].force_constant))
+            self.atom_position_points_3 = vp.gcurve(graph=atom_position_graph, color=vp.color.green, size=0.1, 
+            label="Spring Constant: {} N/m".format(self.sphere_list[4].force_constant))
+            
+            self.atom_velocity_points = vp.gcurve(graph=atom_velocity_graph, color=vp.color.red, size=0.1, 
+                label="Spring Constant: {} N/m".format(self.sphere_list[0].force_constant))
+            self.atom_velocity_points_2 = vp.gcurve(graph=atom_velocity_graph, color=vp.color.blue, size=0.1, 
+                label="Spring Constant: {} N/m".format(self.sphere_list[2].force_constant))
+            self.atom_velocity_points_3 = vp.gcurve(graph=atom_velocity_graph, color=vp.color.green, size=0.1, 
+                label="Spring Constant: {} N/m".format(self.sphere_list[4].force_constant))
+        else:
+            self.atom_position_points = vp.gcurve(graph=atom_position_graph, color=vp.color.red, size=0.1, 
+                label="Spring Constant: {} N/m".format(self.sphere_list[0].force_constant))
+            self.atom_velocity_points = vp.gcurve(graph=atom_velocity_graph, color=vp.color.red, size=0.1, 
+                label="Spring Constant: {} N/m".format(self.sphere_list[0].force_constant))
     
     def _update_plots(self, new_pos, new_vel):
-        magnitude = new_pos.mag
-        self.atom_position_points.plot(pos=(self.time, magnitude))
+        try:
+            magnitude = new_pos[0].mag
+            self.atom_position_points.plot(pos=(self.time, magnitude))
+            magnitude = new_pos[1].mag
+            self.atom_position_points_2.plot(pos=(self.time, magnitude))
+            magnitude = new_pos[2].mag
+            self.atom_position_points_3.plot(pos=(self.time, magnitude))
+        except IndexError:
+            # Should have at least one at the basic case.
+            magnitude = new_pos.mag
+            self.atom_position_points.plot(pos=(self.time, magnitude))
         
-        magnitude = new_vel.mag
-        self.atom_velocity_points.plot(pos=(self.time, magnitude))
-    
+        try:
+            magnitude = new_vel[0].mag
+            self.atom_velocity_points.plot(pos=(self.time, magnitude))
+            magnitude = new_vel[1].mag
+            self.atom_velocity_points_2.plot(pos=(self.time, magnitude))
+            magnitude = new_vel[2].mag
+            self.atom_velocity_points_3.plot(pos=(self.time, magnitude))
+        except IndexError:
+            magnitude = new_vel.mag
+            self.atom_velocity_points.plot(pos=(self.time, magnitude))
+            
     def menu(self):
         units = " Newtons \n"
         # Slider for controlling inward force
@@ -145,7 +226,7 @@ class RenderCell(object):
         vp.scene.append_to_caption(units)
         
         # Slider to change the spring constant.
-        vp.scene.append_to_caption("Apply a force towards the right: \n")
+        vp.scene.append_to_caption("Change the Spring Constant: \n")
         self.spring_constant_slider = vp.slider(pos=(0.,2.), text="Set spring constant", bind=self._update_spring_constant, min=1.0, max=10.0, right=15)
         self.spring_constant_wtext  = vp.wtext(text='{:1.2f}'.format(self.spring_constant_slider.value))
         vp.scene.append_to_caption(" Newtons / meter \n")

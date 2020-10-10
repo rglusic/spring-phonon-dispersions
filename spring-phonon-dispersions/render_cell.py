@@ -63,11 +63,11 @@ class RenderCell(object):
         """
         # Newton's Method
         if not two_body_analytical:
-            spring_force = vp.vector(0.,0.,0.)
             force_dir = (spring.atom_two.pos - spring.atom_one.pos).hat
-            for s in self.spring_list:
-                new_len = (s.atom_one.pos-s.atom_two.pos).mag
-                spring_force += -s.force_constant*(s.eq_len-new_len)*force_dir
+            #for s in self.spring_list:
+            s = spring # Tired of typing spring.
+            new_len = (s.atom_one.pos-s.atom_two.pos).mag
+            spring_force = -s.force_constant*(s.eq_len-new_len)*force_dir
             return spring_force
         
         # Analytical method for two body situation.
@@ -118,7 +118,7 @@ class RenderCell(object):
                     if self.use_two_body_analytical:
                         self.apply_physics(spring, True, t=self.time)
                     else:
-                        spring_force += self.apply_physics(spring)
+                        spring_force = self.apply_physics(spring)
                     
                     # First atom bound to spring
                     spring.atom_one.force = spring_force + spring.atom_one.initial_force
@@ -209,25 +209,25 @@ class RenderCell(object):
         units = " Newtons \n"
         # Slider for controlling inward force
         vp.scene.append_to_caption("Apply a force towards each atom: \n")
-        self.force_slider = vp.slider(pos=(0.,2.), text="Set Force Between Atoms", bind=self._update_force, min=0.0, max=10.0, right=15)
+        self.force_slider = vp.slider(pos=(0.,2.), text="Set Force Between Atoms", bind=self._update_force, min=0.0, max=1.0, right=15)
         self.force_wtext  = vp.wtext(text='{:1.2f}'.format(self.initial_force_factor))
         vp.scene.append_to_caption(units)
         
         # Slider for force only in the left direction.
-        vp.scene.append_to_caption("Apply a force towards the left: \n")
-        self.force_slider_left = vp.slider(pos=(0.,2.), text="Set Force to left", bind=self._update_force_left, min=0.0, max=10.0, right=15)
+        vp.scene.append_to_caption("Apply a force towards the right: \n")
+        self.force_slider_left = vp.slider(pos=(0.,2.), text="Set Force to left", bind=self._update_force_left, min=0.0, max=1.0, right=15)
         self.force_wtext_left  = vp.wtext(text='{:1.2f}'.format(self.initial_force_factor_left))
         vp.scene.append_to_caption(units)
         
         # Slider for force only in the right direction.
-        vp.scene.append_to_caption("Apply a force towards the right: \n")
-        self.force_slider_right = vp.slider(pos=(0.,2.), text="Set Force to right", bind=self._update_force_right, min=0.0, max=10.0, right=15)
+        vp.scene.append_to_caption("Apply a force towards the left: \n")
+        self.force_slider_right = vp.slider(pos=(0.,2.), text="Set Force to right", bind=self._update_force_right, min=0.0, max=1.0, right=15)
         self.force_wtext_right  = vp.wtext(text='{:1.2f}'.format(self.initial_force_factor_right))
         vp.scene.append_to_caption(units)
         
         # Slider to change the spring constant.
         vp.scene.append_to_caption("Change the Spring Constant: \n")
-        self.spring_constant_slider = vp.slider(pos=(0.,2.), text="Set spring constant", bind=self._update_spring_constant, min=1.0, max=10.0, right=15)
+        self.spring_constant_slider = vp.slider(pos=(0.,2.), text="Set spring constant", bind=self._update_spring_constant, min=1.0, max=50.0, right=15)
         self.spring_constant_wtext  = vp.wtext(text='{:1.2f}'.format(self.spring_constant_slider.value))
         vp.scene.append_to_caption(" Newtons / meter \n")
         

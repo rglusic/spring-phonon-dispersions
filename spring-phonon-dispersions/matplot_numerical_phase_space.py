@@ -136,7 +136,7 @@ atoms = np.array(atoms)
 eq_len = np.linalg.norm(atoms[0][0] - atoms[0][1])
 
 # Displace the first atom.
-atoms[0][0] = [-2*a, a+0.1, 0]
+atoms[0][0] = [-2*a+0.1, 0, 0]
 
 numerical = [
          calculate_numerical(atoms, 0.1, eq_len, t)

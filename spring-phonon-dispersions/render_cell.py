@@ -10,6 +10,7 @@ class RenderCell(object):
     rate_of_animation = 1/animation_time_step
     time_step = 0.005
     time = 0.
+    time_stop = 30.
     running = True
     plots = False
     
@@ -105,25 +106,23 @@ class RenderCell(object):
     
     def render(self):
         # Simulation loop
-        while True:
-            # Determine if we're paused or not
-            if self.running:
-                vp.rate(self.rate_of_animation)
+        while self.time < self.time_stop:
+            vp.rate(self.rate_of_animation)
+            
+            # Iterate over all of the springs.
+            for spring in self.spring_list:
+                self.calculate_numerical(spring, self.animation_time_step)
                 
-                # Iterate over all of the springs.
-                for spring in self.spring_list:
-                    self.calculate_numerical(spring, self.animation_time_step)
+                spring.axis = spring.atom_two.pos - spring.atom_one.pos
+                spring.pos  = spring.atom_one.pos
+                
+                # Plot the first atoms position and velocity
+                if self.plots:
+                    self._update_plots(self.spring_list[0].atom_one.pos, self.spring_list[0].atom_one.vel)
                     
-                    spring.axis = spring.atom_two.pos - spring.atom_one.pos
-                    spring.pos  = spring.atom_one.pos
-                    
-                    # Plot the first atoms position and velocity
-                    if self.plots:
-                        self._update_plots(self.spring_list[0].atom_one.pos, self.spring_list[0].atom_one.vel)
-                        
-                    # Update time
-                    self.time += self.animation_time_step
-    
+                # Update time
+                self.time += self.animation_time_step
+            
     def plot_supplimentary_information(self):
         self.plots = True
         atom_position_graph = vp.graph(title='Absolute Displacement of Red Atom', 
@@ -152,18 +151,14 @@ class RenderCell(object):
             
             self.atom_phasespace_points.plot(pos=(vel_mag, pos_mag))
             
-            
-            
-    def menu(self):
-        # Add a Pause/Play button.
-        vp.button(pos=vp.scene.title_anchor, text="Pause", bind=self._pause)
-    
-    def _pause(self, b):
-        # Global bool to pause or play simulation
-        if self.running:
-            self.running = False
-            b.text = "Play"
-        else:
-            self.running = True
-            b.text = "Pause"
-    
+    def delete(self):
+        
+        # Reset the class
+        for a in self.atom_list:
+            a.visible = False
+        for s in self.spring_list:
+            s.visible = False
+        
+        # Clear the objects
+        self.atom_list.clear()
+        self.spring_list.clear()

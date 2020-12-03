@@ -13,6 +13,7 @@ class RenderCell(object):
     time_stop = 30.
     running = True
     plots = False
+    _langragian_form = False
     
     atom_list = []
     spring_list = []

@@ -52,6 +52,15 @@ class RenderCell(object):
                                                 axis=(connect.pos-atom.pos), radius=0.25, force_constant=atom.force_constant,
                                                     coils=atom.force_constant+4))
             
+    def calculate_lagrangian(self, spring, dt):
+        """ Calculates the equations of motion from the lagrangian numerically from the total energy 
+        of the spring system.
+        """
+        # Kinetic energy
+        
+        
+        # Potential energy
+    
     def calculate_numerical(self, spring, dt):
         """ Calculates the Newtonian using a form of Euler's Method. Returns
         the first atoms force, position, and velocity.
@@ -111,7 +120,12 @@ class RenderCell(object):
             
             # Iterate over all of the springs.
             for spring in self.spring_list:
-                self.calculate_numerical(spring, self.animation_time_step)
+                
+                # Decide if we're calculating Newtonian or Lagrangian
+                if self._langragian_form:
+                    self.calculate_lagrangian(spring, self.animation_time_step)
+                else:
+                    self.calculate_numerical(spring, self.animation_time_step)
                 
                 spring.axis = spring.atom_two.pos - spring.atom_one.pos
                 spring.pos  = spring.atom_one.pos
@@ -162,3 +176,6 @@ class RenderCell(object):
         # Clear the objects
         self.atom_list.clear()
         self.spring_list.clear()
+        
+    def use_lagrangian(self, true):
+        self._langragian_form = true
